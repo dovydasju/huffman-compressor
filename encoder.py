@@ -17,20 +17,17 @@ def calc_freq(path_to_file, unit_length) -> dict:
         while len(buffer) >= unit_length:
             word = buffer[:unit_length].to01()
             del buffer[:unit_length]
-            freq[word] = freq[word] + 1 if word in freq else 1
+            freq[word] = (freq[word] + 1) if word in freq else 1
 
-    if buffer:
-        freq[buffer.to01()] = 1
-
-    return freq
+    return freq, buffer
 
 
 def calc_padding(size_in_bits) -> int:
     """Calculates the padding needed"""
-    return 8 - size_in_bits % 8 if size_in_bits % 8 != 0 else 0
+    return (8 - size_in_bits % 8) if (size_in_bits % 8 != 0) else 0
 
 
-def calc_file_size_in_bits(freq, code_table):
+def calc_file_size_in_bits(freq, code_table) -> int:
     """Precalculates encoded file size in bits"""
     num_of_bits = 0
     for k, v in freq.items():
@@ -39,7 +36,7 @@ def calc_file_size_in_bits(freq, code_table):
 
 
 def generate_tree(freq) -> HuffmanNode:
-    """Generates a tree by using the Priority Queue"""
+    """Generates a tree with the help of Priority Queue"""
     pqueue = PriorityQueue()
     for value, occur in freq.items():
         pqueue.put(HuffmanNode(value, occur))
@@ -52,7 +49,7 @@ def generate_tree(freq) -> HuffmanNode:
     return pqueue.get()
 
 
-def encode_tree(node, tree) -> str:
+def encode_tree(node, tree) -> bitarray:
     """Encodes the tree into a string and returns it"""
     if node.value:
         tree += "1"
@@ -71,27 +68,33 @@ def fill_code_table(code_table, node, code):
     else:
         fill_code_table(code_table, node.left, code + "0")
         fill_code_table(code_table, node.right, code + "1")
-
     return code_table
 
 
-def generate_header(unit_len, encoded_tree) -> bitarray:
-    """Generates a file header with """
-    # calculate and add encoded tree padding (extra zeros)
-    tree_xzeros = calc_padding(len(encoded_tree))
-    encoded_tree = tree_xzeros * "0" + encoded_tree
+def pack_set_of_items(value, bytes_for_size) -> str:
+    """Packs a set of items"""
+    # size of the value padding in bits
+    extra_zeros = calc_padding(len(value))
+    # the value itself with added padding
+    value = extra_zeros * "0" + value
+    # size of the value in bytes
+    size_of_value = len(value) // 8
 
-    # calculate the size of encoded tree
-    size_of_encoded_tree = int(len(encoded_tree) / 8)
+    return f"{size_of_value:0{bytes_for_size*8}b}{extra_zeros:08b}{value}"
 
-    header = f"{unit_len:08b}{size_of_encoded_tree:016b}{tree_xzeros:08b}{encoded_tree}"
-    return bitarray(header)
+
+def generate_header(unit_len, remainder, encoded_tree) -> bitarray:
+    """Generates a file header"""
+    remainder_data = pack_set_of_items(remainder, 1)
+    tree_data = pack_set_of_items(encoded_tree, 2)
+
+    return bitarray(f"{unit_len:08b}{remainder_data}{tree_data}")
 
 
 def encode(i_path, o_path, unit_len):
     """Main function that encodes and compresses the file"""
     # calculate the frequency of each word
-    freq = calc_freq(i_path, unit_len)
+    freq, remainder = calc_freq(i_path, unit_len)
 
     # generate the Huffman tree and encode it into a string
     root_node = generate_tree(freq)
@@ -101,7 +104,7 @@ def encode(i_path, o_path, unit_len):
     code_table = fill_code_table(dict(), root_node, "")
 
     # create the file header with needed information
-    file_header = generate_header(unit_len, encoded_tree)
+    file_header = generate_header(unit_len, remainder.to01(), encoded_tree)
 
     # calculate and add file data padding (extra zeros) to the header
     data_xzeros = calc_padding(calc_file_size_in_bits(freq, code_table))
@@ -125,11 +128,11 @@ def encode(i_path, o_path, unit_len):
                 del i_buffer[:unit_len]
                 o_buffer.extend(code_table[word])
 
-            limit = len(o_buffer) // 8 * 8
+            limit = (len(o_buffer) // 8) * 8
             o_buffer[:limit].tofile(o_stream)
             del o_buffer[:limit]
 
 
 if __name__ == "__main__":
     # params: input file, output file, unit length
-    encode("lorem.txt", "compressed", 8)
+    encode("examples/black_image.bmp", "compressed", 16)
