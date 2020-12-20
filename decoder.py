@@ -36,8 +36,8 @@ def decode(i_path, o_path):
     with open(i_path, "rb") as i_stream, open(o_path, "wb") as o_stream:
         # read the header information
         unit_len = int.from_bytes(i_stream.read(1), "big")
-        remainder = unpack_set_of_items(i_stream, 2)
-        encoded_tree = unpack_set_of_items(i_stream, 1)
+        remainder = unpack_set_of_items(i_stream, 1)
+        encoded_tree = unpack_set_of_items(i_stream, 2)
         data_xzeros = int.from_bytes(i_stream.read(1), "big")
 
         # read first byte to remove the data padding
