@@ -1,15 +1,13 @@
 from bitarray import bitarray
 
 from node import HuffmanNode
-from scanner import yield_bytes_from_stream, chunk_size
+from scanner import yield_bytes_from_stream, chunk_size, bytes_for_tree_size
 
 
 def decode_tree(tree_bit_array, unit_len) -> HuffmanNode:
     """Decodes the tree into a HuffmanNode object"""
-    bit = tree_bit_array.pop(0)
-
-    if bit:
-        value = tree_bit_array[:unit_len].to01()
+    if tree_bit_array.pop(0):
+        value = tree_bit_array[:unit_len]
         del tree_bit_array[:unit_len]
         return HuffmanNode(value)
 
@@ -19,9 +17,11 @@ def decode_tree(tree_bit_array, unit_len) -> HuffmanNode:
 def unpack_set_of_items(i_stream, bytes_to_read) -> bitarray:
     """Unpacks a set of items"""
     # size of the value in bytes
-    size_of_value = int.from_bytes(i_stream.read(bytes_to_read), "big")
+    size_of_value = int.from_bytes(i_stream.read(
+        bytes_to_read), byteorder="big", signed=False)
     # size of the value padding in bits
-    extra_zeros = int.from_bytes(i_stream.read(1), "big")
+    extra_zeros = int.from_bytes(
+        i_stream.read(1), byteorder="big", signed=False)
     # the value itself
     value = bitarray()
     value.fromfile(i_stream, size_of_value)
@@ -35,10 +35,12 @@ def decode(i_path, o_path):
     """Main function that decodes and decompresses the file"""
     with open(i_path, "rb") as i_stream, open(o_path, "wb") as o_stream:
         # read the header information
-        unit_len = int.from_bytes(i_stream.read(1), "big")
+        unit_len = int.from_bytes(i_stream.read(
+            1), byteorder="big", signed=False)
         remainder = unpack_set_of_items(i_stream, 1)
-        encoded_tree = unpack_set_of_items(i_stream, 2)
-        data_xzeros = int.from_bytes(i_stream.read(1), "big")
+        encoded_tree = unpack_set_of_items(i_stream, bytes_for_tree_size)
+        data_xzeros = int.from_bytes(
+            i_stream.read(1), byteorder="big", signed=False)
 
         # read first byte to remove the data padding
         i_buffer = bitarray()
@@ -58,10 +60,11 @@ def decode(i_path, o_path):
 
             # walk down through the tree
             for bit in i_buffer:
-                current_node = current_node.right if bit else current_node.left
+                if not current_node.value:
+                    current_node = current_node.right if bit else current_node.left
 
                 # save reached value to an output buffer and reset to the root node
-                if current_node.value is not None:
+                if current_node.value:
                     o_buffer.extend(current_node.value)
                     current_node = root_node
 
@@ -72,8 +75,3 @@ def decode(i_path, o_path):
 
         o_buffer.extend(remainder)
         o_buffer.tofile(o_stream)
-
-
-if __name__ == "__main__":
-    # params: input file, output file
-    decode("compressed", "decompressed.bmp")

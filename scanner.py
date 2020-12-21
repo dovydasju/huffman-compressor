@@ -1,3 +1,4 @@
+bytes_for_tree_size = 2
 chunk_size = 1024
 
 
